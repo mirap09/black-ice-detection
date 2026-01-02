@@ -43,12 +43,12 @@ data/
 !data/.gitkeep
 
 # Models
-models/checkpoints/
-models/exported/*.onnx
-models/exported/*.engine
-*.pt
-*.pth
-*.weights
+#models/checkpoints/
+#models/exported/*.onnx
+#models/exported/*.engine
+#*.pt
+#*.pth
+#*.weights
 
 # Logs
 logs/*.db
