@@ -1,0 +1,10 @@
+# Black Ice Dataset Configuration
+# Generated from Roboflow format
+
+path: /Users/gana/mira/black-ice-detection/data/processed
+train: images/train
+val: images/val
+test: images/test
+
+nc: 1
+names: ['black_ice']

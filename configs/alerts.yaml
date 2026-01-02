@@ -1,0 +1,72 @@
+# Alert System Configuration
+
+# Severity thresholds
+severity:
+  low:
+    confidence_min: 0.3
+    confidence_max: 0.6
+    bbox_area_max: 0.1  # Max 10% of image area
+    message: "Possible black ice detected - Exercise caution"
+    color: [255, 255, 0]  # Yellow (BGR)
+
+  medium:
+    confidence_min: 0.6
+    confidence_max: 0.85
+    bbox_area_max: 0.3  # Max 30% of image area
+    message: "Black ice detected - Reduce speed"
+    color: [0, 165, 255]  # Orange (BGR)
+
+  high:
+    confidence_min: 0.85
+    confidence_max: 1.0
+    bbox_area_max: 1.0  # Any size
+    message: "WARNING: Significant black ice ahead!"
+    color: [0, 0, 255]  # Red (BGR)
+
+# Audio alerts
+audio:
+  enabled: true
+  cooldown_seconds: 5  # Minimum time between audio alerts
+  volume: 0.8  # 0.0 to 1.0
+
+  # TTS (Text-to-Speech) settings
+  tts:
+    enabled: true
+    rate: 150  # Words per minute
+    voice: default  # System default voice
+
+  # Beep settings (if TTS disabled)
+  beep:
+    low_frequency: 440  # Hz
+    medium_frequency: 880
+    high_frequency: 1760
+    duration: 0.5  # seconds
+
+# Visual alerts
+visual:
+  enabled: true
+  show_confidence: true
+  show_labels: true
+  bbox_thickness: 2
+  font_scale: 0.7
+
+  # Screen flash for high severity
+  flash:
+    enabled: true
+    duration: 0.3  # seconds
+    frequency: 2  # flashes per second
+
+# Temporal smoothing
+temporal:
+  enabled: true
+  min_consecutive_frames: 3  # Minimum frames before triggering alert
+  persistence_frames: 10  # Frames to maintain alert after detection stops
+  confidence_smoothing: 0.7  # EMA weight (higher = more current frame weight)
+
+# Logging
+logging:
+  save_detections: true
+  save_images: true  # Save frames with detections
+  image_format: jpg
+  image_quality: 85
+  max_images_per_session: 1000
