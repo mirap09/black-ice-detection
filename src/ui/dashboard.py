@@ -12,6 +12,8 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 import yaml
+import tkinter as tk
+from tkinter import filedialog
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -20,6 +22,19 @@ from src.inference.detector import BlackIceDetector
 from src.utils.camera import Camera
 from src.utils.logging import DetectionLogger
 from src.utils.config import Config
+
+
+def select_file(file_types, title="Select file"):
+    """Open native file browser dialog."""
+    root = tk.Tk()
+    root.withdraw()
+    root.wm_attributes('-topmost', 1)
+    file_path = filedialog.askopenfilename(
+        title=title,
+        filetypes=file_types
+    )
+    root.destroy()
+    return file_path
 
 
 # Page configuration
@@ -158,11 +173,95 @@ def main():
     st.sidebar.header("⚙️ Configuration")
 
     # Model selection
-    model_path = st.sidebar.text_input(
-        "Model Path",
-        value="models/checkpoints/black_ice/weights/best.pt",
-        help="Path to trained YOLO model"
+    st.sidebar.subheader("🧠 Model Selection")
+
+    # Find available models
+    available_models = []
+    models_dir = Path("models")
+
+    if models_dir.exists():
+        # Look for .pt files in common locations
+        for pattern in ["**/*.pt", "*.pt"]:
+            available_models.extend([str(p) for p in models_dir.glob(pattern)])
+
+    # Add default path if not found
+    default_model = "models/checkpoints/black_ice/weights/best.pt"
+    if default_model not in available_models and not available_models:
+        available_models = [default_model]
+
+    # Initialize session state for model path
+    if 'model_path' not in st.session_state:
+        st.session_state.model_path = default_model
+
+    if available_models:
+        # Dropdown for quick selection
+        model_choice = st.sidebar.selectbox(
+            "Select Model",
+            options=["Custom Path"] + available_models,
+            index=1 if len(available_models) > 0 else 0,
+            help="Choose from available models or enter custom path"
+        )
+
+        if model_choice == "Custom Path":
+            col1, col2 = st.sidebar.columns([3, 1])
+            with col1:
+                model_path_input = st.text_input(
+                    "Custom Model Path",
+                    value=st.session_state.model_path,
+                    placeholder="Enter path to .pt model file",
+                    help="Path to trained YOLO model",
+                    label_visibility="collapsed"
+                )
+            with col2:
+                if st.button("📁", key="browse_model", help="Browse for model file"):
+                    selected = select_file(
+                        [("PyTorch Model", "*.pt"), ("All Files", "*.*")],
+                        title="Select Model File"
+                    )
+                    if selected:
+                        st.session_state.model_path = selected
+                        st.rerun()
+            model_path = model_path_input if model_path_input else st.session_state.model_path
+        else:
+            model_path = model_choice
+            st.sidebar.text(f"📁 {model_path}")
+    else:
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            model_path_input = st.text_input(
+                "Model Path",
+                value=st.session_state.model_path,
+                placeholder="Enter path to .pt model file",
+                help="Path to trained YOLO model",
+                label_visibility="collapsed"
+            )
+        with col2:
+            if st.button("📁", key="browse_model", help="Browse for model file"):
+                selected = select_file(
+                    [("PyTorch Model", "*.pt"), ("All Files", "*.*")],
+                    title="Select Model File"
+                )
+                if selected:
+                    st.session_state.model_path = selected
+                    st.rerun()
+        model_path = model_path_input if model_path_input else st.session_state.model_path
+
+    # File upload option for model
+    st.sidebar.markdown("**Or upload a model:**")
+    uploaded_model = st.sidebar.file_uploader(
+        "Upload Model",
+        type=["pt"],
+        help="Upload a trained YOLOv8 .pt model file",
+        label_visibility="collapsed"
     )
+
+    if uploaded_model is not None:
+        # Save uploaded model temporarily
+        temp_model_path = Path("temp_model.pt")
+        with open(temp_model_path, "wb") as f:
+            f.write(uploaded_model.read())
+        model_path = str(temp_model_path)
+        st.sidebar.success(f"✅ Uploaded: {uploaded_model.name}")
 
     # Device selection
     device = st.sidebar.selectbox(
@@ -190,29 +289,100 @@ def main():
     )
 
     # Get camera source value
+    # Initialize session state for video path
+    if 'video_path' not in st.session_state:
+        st.session_state.video_path = ""
+
+    source = None
     if camera_source == "Webcam (0)":
         source = 0
     elif camera_source == "Video File":
-        video_file = st.sidebar.text_input("Video File Path", value="")
-        source = video_file if video_file else 0
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            video_file = st.text_input(
+                "Video File Path",
+                value=st.session_state.video_path,
+                placeholder="Enter path to video file",
+                help="Full path to the video file",
+                label_visibility="collapsed"
+            )
+        with col2:
+            if st.button("📁", key="browse_video", help="Browse for video file"):
+                selected = select_file(
+                    [("Video Files", "*.mp4 *.avi *.mov *.mkv"), ("All Files", "*.*")],
+                    title="Select Video File"
+                )
+                if selected:
+                    st.session_state.video_path = selected
+                    st.rerun()
+
+        # Show file upload option as alternative
+        st.sidebar.markdown("**Or upload a video:**")
+        uploaded_file = st.sidebar.file_uploader(
+            "Upload Video",
+            type=["mp4", "avi", "mov", "mkv"],
+            help="Upload a video file to analyze",
+            label_visibility="collapsed"
+        )
+
+        if uploaded_file is not None:
+            # Save uploaded file temporarily
+            temp_path = Path("temp_upload.mp4")
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.read())
+            source = str(temp_path)
+            st.sidebar.success(f"✅ Uploaded: {uploaded_file.name}")
+        elif video_file and video_file.strip():
+            source = video_file.strip()
+        else:
+            st.sidebar.warning("⚠️ Please enter a video file path or upload a file")
     else:  # IP Camera
-        ip_url = st.sidebar.text_input("RTSP URL", value="rtsp://")
-        source = ip_url if ip_url.startswith("rtsp://") else 0
+        ip_url = st.sidebar.text_input(
+            "RTSP URL",
+            value="",
+            placeholder="rtsp://username:password@ip:port/stream",
+            help="RTSP stream URL"
+        )
+        if ip_url and ip_url.startswith("rtsp://"):
+            source = ip_url
+        else:
+            st.sidebar.warning("⚠️ Please enter a valid RTSP URL")
 
     # Alert settings
     st.sidebar.header("🔔 Alert Settings")
     enable_alerts = st.sidebar.checkbox("Enable Alerts", value=True)
     show_confidence = st.sidebar.checkbox("Show Confidence", value=True)
+    save_detections = st.sidebar.checkbox("Save Detection Frames", value=False, help="Save frames with detections to 'detections/' folder")
+
+    # Video playback settings (only for video files)
+    if camera_source == "Video File":
+        st.sidebar.header("▶️ Playback Settings")
+        playback_speed = st.sidebar.slider(
+            "Playback Speed",
+            min_value=0.1,
+            max_value=2.0,
+            value=1.0,
+            step=0.1,
+            help="Adjust video playback speed (1.0 = normal)"
+        )
 
     # Load detector
     try:
         if not Path(model_path).exists():
-            st.error(f"Model not found: {model_path}")
+            st.error(f"❌ Model not found: {model_path}")
             st.info("Please train a model first: `python src/training/train.py`")
             return
 
         with st.spinner("Loading model..."):
             detector = load_detector(model_path, conf_threshold, device)
+
+        # Show model info
+        st.sidebar.success("✅ Model loaded successfully!")
+        with st.sidebar.expander("📊 Model Info"):
+            model_size = Path(model_path).stat().st_size / (1024 * 1024)  # MB
+            st.text(f"Size: {model_size:.1f} MB")
+            st.text(f"Device: {device.upper()}")
+            st.text(f"Threshold: {conf_threshold}")
 
         # Load alert config
         alert_config_path = "configs/alerts.yaml"
@@ -223,7 +393,8 @@ def main():
             alert_config._config = {}
 
     except Exception as e:
-        st.error(f"Error loading model: {e}")
+        st.error(f"❌ Error loading model: {e}")
+        st.info("Make sure the model file is a valid YOLOv8 .pt file")
         return
 
     # Main content area
@@ -241,7 +412,11 @@ def main():
         alert_placeholder = st.empty()
 
         st.subheader("🕐 Recent Detections")
+        st.markdown("*Shows frame number, time, confidence, and coverage area*")
         recent_placeholder = st.empty()
+
+        st.subheader("💾 Detection Summary")
+        summary_placeholder = st.empty()
 
     # Control buttons
     col_start, col_stop = st.columns(2)
@@ -270,15 +445,28 @@ def main():
 
     # Detection loop
     if st.session_state.running:
+        # Validate source
+        if source is None:
+            st.error("⚠️ Please configure a valid camera source before starting detection")
+            st.session_state.running = False
+            return
+
         try:
+            # For video files, check if file exists
+            if isinstance(source, str) and not source.startswith("rtsp://"):
+                if not Path(source).exists():
+                    st.error(f"❌ Video file not found: {source}")
+                    st.session_state.running = False
+                    return
+
             camera = Camera(source)
 
             if not camera.open():
-                st.error("Failed to open camera")
+                st.error(f"❌ Failed to open camera source: {source}")
                 st.session_state.running = False
                 return
 
-            st.success("Detection started!")
+            st.success(f"✅ Detection started! Source: {source}")
 
             while st.session_state.running:
                 # Read frame
@@ -305,8 +493,10 @@ def main():
                         severity = get_severity(det['confidence'], bbox_area, alert_config)
                         st.session_state.recent_detections.insert(0, {
                             'time': time.strftime('%H:%M:%S'),
+                            'frame': st.session_state.total_frames,
                             'confidence': det['confidence'],
-                            'severity': severity
+                            'severity': severity,
+                            'bbox_area': f"{bbox_area*100:.1f}%"
                         })
 
                     # Keep only last 10
@@ -314,6 +504,13 @@ def main():
 
                 # Draw detections
                 annotated_frame = draw_detections(frame, detections, alert_config)
+
+                # Save detection frames if enabled
+                if detections and save_detections:
+                    save_dir = Path("detections")
+                    save_dir.mkdir(exist_ok=True)
+                    save_path = save_dir / f"frame_{st.session_state.total_frames:05d}.jpg"
+                    cv2.imwrite(str(save_path), annotated_frame)
 
                 # Convert BGR to RGB
                 annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
@@ -352,18 +549,48 @@ def main():
                 # Update recent detections
                 with recent_placeholder.container():
                     if st.session_state.recent_detections:
-                        for det in st.session_state.recent_detections[:5]:
+                        for det in st.session_state.recent_detections[:10]:
                             severity_emoji = {
                                 'low': '🟡',
                                 'medium': '🟠',
                                 'high': '🔴'
                             }
-                            st.text(f"{severity_emoji.get(det['severity'], '⚪')} {det['time']} - {det['confidence']:.2%}")
+                            st.text(
+                                f"{severity_emoji.get(det['severity'], '⚪')} "
+                                f"Frame {det['frame']:05d} | "
+                                f"{det['time']} | "
+                                f"Conf: {det['confidence']:.1%} | "
+                                f"Area: {det['bbox_area']}"
+                            )
                     else:
                         st.text("No recent detections")
 
-                # Small delay to prevent overwhelming the UI
-                time.sleep(0.01)
+                # Update detection summary
+                with summary_placeholder.container():
+                    if st.session_state.detection_count > 0:
+                        detection_rate = (st.session_state.detection_count / st.session_state.total_frames) * 100
+                        st.metric("Detection Rate", f"{detection_rate:.1f}%")
+                        st.metric("Total Detections", st.session_state.detection_count)
+
+                        # Count by severity
+                        severity_counts = {'low': 0, 'medium': 0, 'high': 0}
+                        for det in st.session_state.recent_detections:
+                            severity_counts[det['severity']] += 1
+
+                        st.text(f"🟡 Low: {severity_counts['low']}")
+                        st.text(f"🟠 Medium: {severity_counts['medium']}")
+                        st.text(f"🔴 High: {severity_counts['high']}")
+                    else:
+                        st.text("No detections yet")
+
+                # Adjust playback speed for video files
+                if camera_source == "Video File" and playback_speed < 1.0:
+                    # Add delay to slow down playback
+                    delay = (1.0 / playback_speed - 1.0) * 0.03
+                    time.sleep(delay)
+                else:
+                    # Small delay to prevent overwhelming the UI
+                    time.sleep(0.01)
 
             camera.release()
             st.info("Detection stopped")
