@@ -38,10 +38,9 @@ ENV/
 .ipynb_checkpoints
 *.ipynb_checkpoints
 
-# Data
-data/raw/
-data/augmented/
-*.zip
+# Data - ignore entire data directory except structure
+data/
+!data/.gitkeep
 
 # Models
 models/checkpoints/
